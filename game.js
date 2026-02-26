@@ -99,6 +99,9 @@ const gameState = {
     enemySpeed: 1.5,
     enemyShootChance: 0.015,
     bossObj: null,
+    powerUps: [],
+    weaponLevel: 1, // 1 = Single, 2 = Double Shot
+    weaponTimer: 0,
     frameCount: 0,
     gameLoopReq: null
 };
@@ -210,18 +213,28 @@ function fireLaser() {
     audio.init();
     audio.playShootSound();
 
+    if (gameState.weaponLevel === 1) {
+        createPlayerLaser(gameState.shipX, gameState.shipY);
+    } else {
+        // Double Shot
+        createPlayerLaser(gameState.shipX - 10, gameState.shipY);
+        createPlayerLaser(gameState.shipX + 10, gameState.shipY);
+    }
+}
+
+function createPlayerLaser(x, y) {
     const laser = document.createElement('div');
     laser.classList.add('laser');
 
-    laser.style.left = `${gameState.shipX}px`;
-    laser.style.top = `${gameState.shipY}px`;
+    laser.style.left = `${x}px`;
+    laser.style.top = `${y}px`;
 
     document.body.appendChild(laser);
 
     gameState.lasers.push({
         element: laser,
-        x: gameState.shipX,
-        y: gameState.shipY
+        x: x,
+        y: y
     });
 }
 
@@ -232,14 +245,45 @@ function spawnEnemy() {
     const enemy = document.createElement('div');
     enemy.classList.add('enemy-popup');
 
-    // Mock popup content
-    enemy.innerHTML = `
-        <div class="title">We value your privacy</div>
-        <div>Accept cookies to continue.</div>
-        <div class="btn">Accept All</div>
-    `;
+    const rand = Math.random();
+    let type = 'normal';
+    let hp = 1;
+    let enemyWidth = 200;
 
-    const enemyWidth = 200;
+    if (rand > 0.9) {
+        type = 'cookie';
+        enemy.classList.add('enemy-cookie');
+        enemyWidth = 160;
+        enemy.innerHTML = `
+            <div class="title">Cookies!</div>
+            <div style="font-size:11px">We track you.</div>
+        `;
+    } else if (rand > 0.8) {
+        type = 'banner';
+        enemy.classList.add('enemy-banner');
+        enemyWidth = 300;
+        hp = 3;
+        enemy.innerHTML = `
+            <div class="title">HOT DEAL 99% OFF</div>
+            <div>CLICK HERE NOW TO CLAIM</div>
+        `;
+    } else if (rand > 0.6) {
+        type = 'trojan';
+        enemy.classList.add('enemy-trojan');
+        enemyWidth = 160;
+        enemy.innerHTML = `
+            <div class="title">VIRUS DETECTED</div>
+            <div style="font-size:11px">Action required!</div>
+        `;
+    } else {
+        // Mock popup content normal
+        enemy.innerHTML = `
+            <div class="title">We value your privacy</div>
+            <div>Accept cookies to continue.</div>
+            <div class="btn">Accept All</div>
+        `;
+    }
+
     // Keep enemy inside horizontal bounds
     const startX = Math.random() * (window.innerWidth - enemyWidth) + (enemyWidth / 2);
     const startY = -100; // Start off-screen
@@ -255,7 +299,29 @@ function spawnEnemy() {
         x: startX,
         y: startY,
         width: enemyWidth,
-        height: 80 // Approx height based on content
+        height: 80, // Approx height based on content
+        type: type,
+        hp: hp
+    });
+}
+
+/**
+ * Spawn a power-up
+ */
+function spawnPowerUp(x, y) {
+    const pu = document.createElement('div');
+    pu.classList.add('power-up');
+
+    pu.style.left = `${x}px`;
+    pu.style.top = `${y}px`;
+
+    document.body.appendChild(pu);
+
+    gameState.powerUps.push({
+        element: pu,
+        x: x,
+        y: y,
+        speed: 2
     });
 }
 
@@ -368,6 +434,24 @@ function startBossFight() {
 }
 
 /**
+ * Handles damage taken by player (Insta-kill)
+ */
+function takeDamage() {
+    if (gameState.isGameOver) return;
+
+    // Screen Shake effect
+    document.body.classList.add('screen-shake');
+    audio.playExplosionSound();
+
+    // Replace player with explosion and trigger game over
+    if (gameState.playerShip) {
+        gameState.playerShip.classList.add('exploding');
+    }
+
+    gameOver();
+}
+
+/**
  * Triggers Game Over sequence (BSOD)
  */
 function gameOver() {
@@ -381,6 +465,8 @@ function gameOver() {
     document.removeEventListener('mousemove', handleMouseMove);
     document.removeEventListener('mousedown', handleMouseClick);
 
+    // Forces mouse to reappear naturally and disables game mode effects
+    document.body.classList.remove('game-active');
     document.body.style.cursor = 'default';
 
     // Create BSOD overlay
@@ -467,16 +553,35 @@ function checkCollisions() {
                 gameState.lasers.splice(i, 1);
                 laserRemoved = true;
 
-                // Explosion effect
-                enemyObj.element.classList.add('exploding');
-                const el = enemyObj.element;
-                setTimeout(() => {
-                    el.remove();
-                }, 300);
-                gameState.enemies.splice(j, 1);
-
-                updateScore(100);
+                enemyObj.hp -= 1;
                 audio.playExplosionSound();
+
+                if (enemyObj.hp <= 0) {
+                    // Explosion effect
+                    enemyObj.element.classList.add('exploding');
+                    const el = enemyObj.element;
+                    setTimeout(() => {
+                        el.remove();
+                    }, 300);
+                    gameState.enemies.splice(j, 1);
+
+                    let pnts = 100;
+                    if (enemyObj.type === 'banner') pnts = 300;
+                    else if (enemyObj.type === 'trojan') pnts = 150;
+                    else if (enemyObj.type === 'cookie') pnts = 200;
+                    updateScore(pnts);
+
+                    // Chance de dropar Power-Up (10%)
+                    if (Math.random() < 0.1) {
+                        spawnPowerUp(enemyObj.x, enemyObj.y);
+                    }
+                } else {
+                    // Hit visual feedback
+                    enemyObj.element.style.borderColor = '#ffffff';
+                    setTimeout(() => {
+                        if (enemyObj.element) enemyObj.element.style.borderColor = '';
+                    }, 100);
+                }
                 break; // Stop checking this laser vs other enemies
             }
         }
@@ -516,19 +621,19 @@ function checkCollisions() {
         }
     }
 
+    // Shrink the player hitbox slightly to make dodging feel fairer (Bullet Hell standard)
+    const hitBoxShrinkX = 5;
+    const hitBoxShrinkY = 5;
+
+    const pLeft = playerRect.left + hitBoxShrinkX;
+    const pRight = playerRect.right - hitBoxShrinkX;
+    const pTop = playerRect.top + hitBoxShrinkY;
+    const pBottom = playerRect.bottom;
+
     // 2. Enemy Lasers vs Player Ship
     for (let i = gameState.enemyLasers.length - 1; i >= 0; i--) {
         const eLaserObj = gameState.enemyLasers[i];
         const eLaserRect = eLaserObj.element.getBoundingClientRect();
-
-        // Shrink the player hitbox slightly to make dodging feel fairer (Bullet Hell standard)
-        const hitBoxShrinkX = 5;
-        const hitBoxShrinkY = 5;
-
-        const pLeft = playerRect.left + hitBoxShrinkX;
-        const pRight = playerRect.right - hitBoxShrinkX;
-        const pTop = playerRect.top + hitBoxShrinkY;
-        const pBottom = playerRect.bottom;
 
         if (
             eLaserRect.left < pRight &&
@@ -536,9 +641,48 @@ function checkCollisions() {
             eLaserRect.top < pBottom &&
             eLaserRect.bottom > pTop
         ) {
-            // Player hit!
-            gameOver();
-            return;
+            eLaserObj.element.remove();
+            gameState.enemyLasers.splice(i, 1);
+            takeDamage();
+            if (gameState.isGameOver) return;
+        }
+    }
+
+    // 3. Player vs Enemies (Body Collision)
+    for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+        const enemyObj = gameState.enemies[j];
+        const enemyRect = enemyObj.element.getBoundingClientRect();
+
+        if (
+            enemyRect.left < pRight &&
+            enemyRect.right > pLeft &&
+            enemyRect.top < pBottom &&
+            enemyRect.bottom > pTop
+        ) {
+            takeDamage();
+            if (gameState.isGameOver) return;
+        }
+    }
+
+    // 4. Player vs Power-Ups
+    for (let k = gameState.powerUps.length - 1; k >= 0; k--) {
+        const puObj = gameState.powerUps[k];
+        const puRect = puObj.element.getBoundingClientRect();
+
+        if (
+            puRect.left < pRight &&
+            puRect.right > pLeft &&
+            puRect.top < pBottom &&
+            puRect.bottom > pTop
+        ) {
+            puObj.element.remove();
+            gameState.powerUps.splice(k, 1);
+
+            // Activate Weapon Upgrade
+            gameState.weaponLevel = 2;
+            gameState.weaponTimer = Date.now();
+            audio.playShootSound(); // Provide generic grab sound
+            showNotification("WEAPON UPGRADE!");
         }
     }
 }
@@ -582,6 +726,11 @@ function gameLoop() {
         gameState.playerShip.style.top = `${gameState.shipY}px`;
     }
 
+    // Check Power-Up duration expiration (5 seconds)
+    if (gameState.weaponLevel > 1 && Date.now() - gameState.weaponTimer > 5000) {
+        gameState.weaponLevel = 1;
+    }
+
     // Spawn Enemy Logic (or Boss Phase)
     if (!gameState.isBossFight) {
         if (gameState.frameCount % Math.floor(gameState.enemySpawnRate) === 0) {
@@ -590,18 +739,32 @@ function gameLoop() {
     } else if (gameState.bossObj) {
         // Boss Movement & Attack Logic
         const boss = gameState.bossObj;
-        boss.x += boss.vx;
+
+        // Enrage Mode (Speed buff when HP < 30%)
+        let isEnraged = boss.hp < (boss.maxHp * 0.3);
+        let moveSpeed = isEnraged ? boss.vx * 1.5 : boss.vx;
+
+        boss.x += moveSpeed;
 
         // Ping-pong nas bordas
         if (boss.x - boss.width / 2 <= 0 || boss.x + boss.width / 2 >= window.innerWidth) {
-            boss.vx *= -1;
+            boss.vx *= -1; // Reverse base direction
         }
 
         boss.element.style.left = `${boss.x - boss.width / 2}px`;
 
-        // Boss Shoot
-        if (Math.random() < 0.05) { // 5% chance per frame (pretty frequently)
-            const baseDy = 7;
+        // Visual Enrage Effect
+        if (isEnraged) {
+            boss.element.style.boxShadow = `0 0 ${20 + Math.random() * 30}px #ff0000`; // Pulsing shadow
+            boss.element.style.transform = `translate(${Math.random() * 4 - 2}px, ${Math.random() * 4 - 2}px)`; // Jitter
+        } else {
+            boss.element.style.transform = 'none';
+        }
+
+        // Boss Shoot (More frequent when enraged)
+        let bossShootChance = isEnraged ? 0.08 : 0.05;
+        if (Math.random() < bossShootChance) { // 5% base - 8% enraged
+            const baseDy = isEnraged ? 9 : 7; // Faster lasers
             const leftDx = -2.5;
             const rightDx = 2.5;
 
@@ -627,17 +790,33 @@ function gameLoop() {
     for (let i = gameState.enemies.length - 1; i >= 0; i--) {
         const enemyObj = gameState.enemies[i];
 
-        enemyObj.y += gameState.enemySpeed;
-        // Zig-zag motion using sine wave
-        enemyObj.x = enemyObj.baseX + Math.sin((gameState.frameCount + i * 50) / 40) * 80;
+        if (enemyObj.type === 'normal') {
+            enemyObj.y += gameState.enemySpeed;
+            enemyObj.x = enemyObj.baseX + Math.sin((gameState.frameCount + i * 50) / 40) * 80;
+        } else if (enemyObj.type === 'trojan') {
+            enemyObj.y += gameState.enemySpeed * 2.5; // Fast straight down
+        } else if (enemyObj.type === 'banner') {
+            enemyObj.y += gameState.enemySpeed * 0.5; // Slow vertical
+            enemyObj.x = enemyObj.baseX + Math.sin((gameState.frameCount + i * 50) / 80) * 120; // Wide sweep
+        } else if (enemyObj.type === 'cookie') {
+            enemyObj.y += gameState.enemySpeed * 0.8;
+            // homing X
+            if (enemyObj.x < gameState.shipX - 10) enemyObj.x += 1.5;
+            else if (enemyObj.x > gameState.shipX + 10) enemyObj.x -= 1.5;
+        }
 
         // Offset by half-width to keep the center of the enemy aligned with x
         enemyObj.element.style.top = `${enemyObj.y}px`;
         enemyObj.element.style.left = `${enemyObj.x - (enemyObj.width / 2)}px`;
 
-        // Random chance to shoot (~1.5% chance per frame)
-        if (Math.random() < gameState.enemyShootChance) {
-            spawnEnemyLaser(enemyObj.x, enemyObj.y + enemyObj.height);
+        // Random chance to shoot
+        if (enemyObj.type !== 'trojan') { // Kamikazes don't shoot
+            let shootChance = gameState.enemyShootChance;
+            if (enemyObj.type === 'cookie') shootChance *= 1.5; // Cookies shoot more
+
+            if (Math.random() < shootChance) {
+                spawnEnemyLaser(enemyObj.x, enemyObj.y + enemyObj.height);
+            }
         }
 
         // Cleanup off-screen enemies
@@ -662,6 +841,18 @@ function gameLoop() {
         if (eLaserObj.y > window.innerHeight + 50 || eLaserObj.x < -50 || eLaserObj.x > window.innerWidth + 50) {
             eLaserObj.element.remove();
             gameState.enemyLasers.splice(i, 1);
+        }
+    }
+
+    // Update PowerUps
+    for (let i = gameState.powerUps.length - 1; i >= 0; i--) {
+        const puObj = gameState.powerUps[i];
+        puObj.y += puObj.speed;
+        puObj.element.style.top = `${puObj.y}px`;
+
+        if (puObj.y > window.innerHeight + 50) {
+            puObj.element.remove();
+            gameState.powerUps.splice(i, 1);
         }
     }
 
