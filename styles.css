@@ -141,6 +141,8 @@ body.game-active {
     cursor: none !important;
     background-color: #080b12 !important;
     color: #e0e0e0;
+    user-select: none;
+    -webkit-user-select: none;
 
     /* Efeito Parallax de Estrelas em CSS Puro */
     background-image:
@@ -280,16 +282,16 @@ body.game-active .enemy-cookie {
 
 /* Enemy Lasers */
 .enemy-laser {
-    width: 4px;
-    height: 15px;
+    width: 6px;
+    height: 22px;
     background-color: #ffaa00;
     /* Orange/Yellow for distinction */
     position: fixed;
     pointer-events: none;
     z-index: 9996;
     transform: translate(-50%, 0);
-    border-radius: 2px;
-    box-shadow: 0 0 5px #ffaa00, 0 0 10px #ffaa00;
+    border-radius: 3px;
+    box-shadow: 0 0 8px #ffaa00, 0 0 15px #ffaa00;
 }
 
 /* HUD / Score */

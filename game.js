@@ -215,10 +215,17 @@ function fireLaser() {
 
     if (gameState.weaponLevel === 1) {
         createPlayerLaser(gameState.shipX, gameState.shipY);
-    } else {
+    } else if (gameState.weaponLevel === 2) {
         // Double Shot
         createPlayerLaser(gameState.shipX - 10, gameState.shipY);
         createPlayerLaser(gameState.shipX + 10, gameState.shipY);
+    } else {
+        // Multi-Shot for higher levels (3+)
+        let spread = 15;
+        for (let i = 0; i < gameState.weaponLevel; i++) {
+            let offset = (i - (gameState.weaponLevel - 1) / 2) * spread;
+            createPlayerLaser(gameState.shipX + offset, gameState.shipY);
+        }
     }
 }
 
@@ -571,8 +578,8 @@ function checkCollisions() {
                     else if (enemyObj.type === 'cookie') pnts = 200;
                     updateScore(pnts);
 
-                    // Chance de dropar Power-Up (10%)
-                    if (Math.random() < 0.1) {
+                    // Chance de dropar Power-Up (3%)
+                    if (Math.random() < 0.03) {
                         spawnPowerUp(enemyObj.x, enemyObj.y);
                     }
                 } else {
@@ -664,6 +671,21 @@ function checkCollisions() {
         }
     }
 
+    // 3.1 Player vs Boss (Body Collision)
+    if (gameState.isBossFight && gameState.bossObj) {
+        const bossRect = gameState.bossObj.element.getBoundingClientRect();
+
+        if (
+            bossRect.left < pRight &&
+            bossRect.right > pLeft &&
+            bossRect.top < pBottom &&
+            bossRect.bottom > pTop
+        ) {
+            takeDamage();
+            if (gameState.isGameOver) return;
+        }
+    }
+
     // 4. Player vs Power-Ups
     for (let k = gameState.powerUps.length - 1; k >= 0; k--) {
         const puObj = gameState.powerUps[k];
@@ -678,11 +700,10 @@ function checkCollisions() {
             puObj.element.remove();
             gameState.powerUps.splice(k, 1);
 
-            // Activate Weapon Upgrade
-            gameState.weaponLevel = 2;
-            gameState.weaponTimer = Date.now();
+            // Activate Weapon Upgrade Accumulative
+            gameState.weaponLevel += 1;
             audio.playShootSound(); // Provide generic grab sound
-            showNotification("WEAPON UPGRADE!");
+            showNotification(`WEAPON UPGRADE (LVL ${gameState.weaponLevel})!`);
         }
     }
 }
@@ -726,10 +747,10 @@ function gameLoop() {
         gameState.playerShip.style.top = `${gameState.shipY}px`;
     }
 
-    // Check Power-Up duration expiration (5 seconds)
-    if (gameState.weaponLevel > 1 && Date.now() - gameState.weaponTimer > 5000) {
-        gameState.weaponLevel = 1;
-    }
+    // Check Power-Up duration expiration (Removido, agora é acumulativo)
+    // if (gameState.weaponLevel > 1 && Date.now() - gameState.weaponTimer > 5000) {
+    //     gameState.weaponLevel = 1;
+    // }
 
     // Spawn Enemy Logic (or Boss Phase)
     if (!gameState.isBossFight) {
